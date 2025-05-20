@@ -9,7 +9,7 @@
     Release Notes:
     - Version 1.1 : Aura Fix
 
-    Major Credit to Dead and Daddy for CruxPickpocket and Aura management.
+    Major Credit to Higgins and Daddy for CruxPickpocket and Aura management.
     Almost no work done by me
 ]]
 
