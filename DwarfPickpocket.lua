@@ -3,11 +3,11 @@
     Description: Dwarf Traders Pickpocket
 
     Author: (Barely) Jared
-    Version: 1.0
+    Version: 1.1
     Release Date: 20/05/2025
 
     Release Notes:
-    - Version 1.0 : Initial release
+    - Version 1.1 : Aura Fix
 
     Major Credit to Dead and Daddy for CruxPickpocket and Aura management.
     Almost no work done by me
@@ -24,6 +24,12 @@ local ID = {
     
 }
 local aura = { buffID = 26098, id = 30798, interfaceSlot = 76 } --five fingers
+
+local refreshInterface = {
+    InterfaceComp5.new(1477, 25, -1, 0),
+    InterfaceComp5.new(1477, 765, -1, 0),
+    InterfaceComp5.new(1477, 767, -1, 0),
+}
 local auraRefreshInterface2 = {
     InterfaceComp5.new(1929, 0, -1, 0),
     InterfaceComp5.new(1929, 3, -1, 0),
@@ -160,32 +166,12 @@ local function activateAura()
         print("Aura cannot be activated")
     end
 end
-local function resetAura()
-    print("aura on cooldown, resetting")
-    RandomSleep2(1200,0,0)
-    openAuraInterface()
-    RandomSleep2(1200,0,0)
-    API.DoAction_Interface(0xffffffff,0x5716,1,1929,95,23,API.OFF_ACT_GeneralInterface_route)
-    RandomSleep2(1200,0,0)
-    API.DoAction_Interface(0xffffffff,0x7c68,1,1929,24,-1,API.OFF_ACT_GeneralInterface_route)
-    RandomSleep2(1800,0,0)
-    refreshStatus = API.ScanForInterfaceTest2Get(false, refreshInterface)
-    auraRefreshes = API.ScanForInterfaceTest2Get(false, auraRefreshInterface2)
-    if #refreshStatus > 0 and auraRefreshes[1].itemid1_size > 0 then
-        API.DoAction_Interface(0xffffffff,0xffffffff,0,1188,8,-1,API.OFF_ACT_GeneralInterface_Choose_option)
-    end
-    RandomSleep2(1800,0,0)
-end
-
-local AREA = {
-    KNIGHT = { 3320, 3297 },
-    WAR = { 3294, 10127 }
-}
-
 local afk, startTime = os.time(), os.time()
 local skill = "THIEVING"
 local startXp = API.GetSkillXP(skill)
 local MAX_IDLE_TIME_MINUTES = 10
+local lastFailedReset = 0  -- Track when the last failed reset occurred
+local RESET_COOLDOWN = 3 * 60 * 60  -- 3 hours in seconds
 
 local function idleCheck()
     local timeDiff = os.difftime(os.time(), afk)
@@ -196,7 +182,27 @@ local function idleCheck()
         afk = os.time()
     end
 end
-
+local function resetAura()
+    print("aura on cooldown, resetting")
+    API.RandomSleep2(1200,0,0)
+    openAuraInterface()
+    API.RandomSleep2(1200,0,0)
+    API.DoAction_Interface(0xffffffff,0x784e,1,1929,95,23,API.OFF_ACT_GeneralInterface_route)
+    API.RandomSleep2(1200,0,0)
+    API.DoAction_Interface(0xffffffff,0xa6a5,1,1929,22,-1,API.OFF_ACT_GeneralInterface_route) --requires a general reset aura scroll
+    API.RandomSleep2(1800,0,0)
+    refreshStatus = API.ScanForInterfaceTest2Get(false, refreshInterface)
+    auraRefreshes = API.ScanForInterfaceTest2Get(false, auraRefreshInterface2)
+    if #refreshStatus > 0 and auraRefreshes[1].itemid1_size > 0 then
+        API.DoAction_Interface(0xffffffff,0xffffffff,0,1188,8,-1,API.OFF_ACT_GeneralInterface_Choose_option)
+        return true  -- Reset was successful
+    else
+        lastFailedReset = os.time()  -- Record the failed reset time
+        print("Aura reset failed, will try again in 3 hours (Out of reset scrolls)")
+        return false  -- Reset failed
+    end
+    API.RandomSleep2(1800,0,0)
+end
 local function round(val, decimal)
     if decimal then
         return math.floor((val * 10 ^ decimal) + 0.5) / (10 ^ decimal)
@@ -281,8 +287,18 @@ end
 local function maintainaura()
     if API.Buffbar_GetIDstatus(aura.buffId, false).id <= 0 then
         if not isAuraEquipped() then
+            -- Check if we're still in cooldown from a failed reset
+            local timeSinceLastFailed = os.time() - lastFailedReset
+            if timeSinceLastFailed < RESET_COOLDOWN then
+                print("Still in cooldown from last failed reset. Time remaining: " .. 
+                    math.floor((RESET_COOLDOWN - timeSinceLastFailed) / 60) .. " minutes")
+                return
+            end
+            
             if auraOnCooldown() then 
-                resetAura() 
+                if not resetAura() then
+                    return  -- Exit if reset failed
+                end
             end
             selectAura()  -- Ensure the aura is selected before activation
             activateAura() -- Activate the aura if not already active
@@ -376,3 +392,4 @@ while API.Read_LoopyLoop() do
     printProgressReport()
     API.RandomSleep2(50, 100, 100)
 end
+
